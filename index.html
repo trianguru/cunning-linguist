@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#000000" />
+  <title>Cunning Linguist</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      color: #888;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #surface {
+      position: fixed; inset: 0;
+      background: #000;
+      z-index: 1;
+    }
+    #hud {
+      position: fixed;
+      top: env(safe-area-inset-top, 12px);
+      left: 12px;
+      right: 12px;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      opacity: 0.35;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+    #hud.active { opacity: 0.7; }
+    #status {
+      max-width: 70%;
+      line-height: 1.3;
+    }
+    #btn-row {
+      display: flex;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    button.icon {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #aaa;
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    button.icon:active { background: rgba(255,255,255,0.2); }
+    #last-cue {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 20px);
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 18px;
+      color: #ccc;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      z-index: 5;
+      text-shadow: 0 0 12px rgba(0,0,0,0.9);
+    }
+    #last-cue.show { opacity: 0.85; }
+    #panel {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 20;
+      display: none;
+      flex-direction: column;
+      padding: 24px 16px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #panel.open { display: flex; }
+    #panel h1 {
+      font-size: 18px;
+      color: #ddd;
+      margin-bottom: 4px;
+    }
+    #panel .sub {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 20px;
+    }
+    .field {
+      margin-bottom: 14px;
+    }
+    .field label {
+      display: block;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #777;
+      margin-bottom: 4px;
+    }
+    .field input, .field select {
+      width: 100%;
+      background: #111;
+      border: 1px solid #333;
+      color: #eee;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+    .field input:focus, .field select:focus {
+      outline: none;
+      border-color: #555;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .row button {
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-primary { background: #c44; color: #fff; }
+    .btn-secondary { background: #222; color: #ccc; border: 1px solid #444; }
+    .btn-danger { background: #311; color: #f88; border: 1px solid #522; }
+    #hint {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 60px);
+      left: 16px; right: 16px;
+      text-align: center;
+      font-size: 11px;
+      color: #444;
+      line-height: 1.4;
+      pointer-events: none;
+      z-index: 4;
+    }
+    .gesture-list {
+      font-size: 12px;
+      color: #666;
+      line-height: 1.55;
+      margin-top: 8px;
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="surface"></div>
+
+  <div id="hud">
+    <div id="status">Ready · tap screen to wake speech</div>
+    <div id="btn-row">
+      <button class="icon" id="btn-settings" title="Settings">⚙</button>
+      <button class="icon" id="btn-fs" title="Full screen">⛶</button>
+    </div>
+  </div>
+
+  <div id="last-cue"></div>
+  <div id="hint">
+    Swipe ↑ harder · ↓ softer · multi-↑ faster · multi-↓ slower<br>
+    Circle = keep going · Long-press = right there · Double-tap = stop
+  </div>
+
+  <div id="panel">
+    <h1>Cunning Linguist</h1>
+    <div class="sub">One-finger remote for the receiving partner. Eyes-free. Spoken cues only.</div>
+
+    <div class="gesture-list">
+      <strong>Default gestures</strong><br>
+      ↑ single = Harder &nbsp;·&nbsp; ↓ single = Softer<br>
+      ↑↑ rapid = Faster &nbsp;·&nbsp; ↓↓ rapid = Slower<br>
+      Circle (finger draws loop) = Keep going / circle that<br>
+      Long-press = Right there<br>
+      Double-tap = Stop / ease off<br>
+      ← / → = Left side / Right side
+    </div>
+
+    <div class="field">
+      <label>Voice</label>
+      <select id="voice-select"></select>
+    </div>
+    <div class="field">
+      <label>Speech rate (0.7 – 1.3)</label>
+      <input type="range" id="rate" min="0.7" max="1.3" step="0.05" value="1.0" />
+    </div>
+    <div class="field">
+      <label>Phrase: Harder (↑)</label>
+      <input type="text" id="p-harder" value="Harder" />
+    </div>
+    <div class="field">
+      <label>Phrase: Softer (↓)</label>
+      <input type="text" id="p-softer" value="Softer" />
+    </div>
+    <div class="field">
+      <label>Phrase: Faster (↑↑)</label>
+      <input type="text" id="p-faster" value="Faster" />
+    </div>
+    <div class="field">
+      <label>Phrase: Slower (↓↓)</label>
+      <input type="text" id="p-slower" value="Slower" />
+    </div>
+    <div class="field">
+      <label>Phrase: Keep going (circle)</label>
+      <input type="text" id="p-circle" value="Keep going. Circle that." />
+    </div>
+    <div class="field">
+      <label>Phrase: Right there (long-press)</label>
+      <input type="text" id="p-right" value="Right there. Don't move." />
+    </div>
+    <div class="field">
+      <label>Phrase: Stop (double-tap)</label>
+      <input type="text" id="p-stop" value="Stop. Ease off." />
+    </div>
+    <div class="field">
+      <label>Phrase: Left side</label>
+      <input type="text" id="p-left" value="Left side" />
+    </div>
+    <div class="field">
+      <label>Phrase: Right side</label>
+      <input type="text" id="p-rightside" value="Right side" />
+    </div>
+
+    <div class="row">
+      <button class="btn-secondary" id="btn-test">Test voice</button>
+      <button class="btn-primary" id="btn-save">Save & close</button>
+    </div>
+    <div class="row">
+      <button class="btn-danger" id="btn-reset">Reset phrases</button>
+    </div>
+  </div>
+
+  <script>
+    // ---------- Config & persistence ----------
+    const DEFAULTS = {
+      harder: "Harder",
+      softer: "Softer",
+      faster: "Faster",
+      slower: "Slower",
+      circle: "Keep going. Circle that.",
+      right: "Right there. Don't move.",
+      stop: "Stop. Ease off.",
+      left: "Left side",
+      rightside: "Right side",
+      rate: 1.0
+    };
+
+    let phrases = { ...DEFAULTS };
+    let speechRate = 1.0;
+    let selectedVoiceURI = null;
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem("cl_settings");
+        if (raw) {
+          const s = JSON.parse(raw);
+          Object.assign(phrases, s.phrases || {});
+          speechRate = s.rate || 1.0;
+          selectedVoiceURI = s.voiceURI || null;
+        }
+      } catch (e) {}
+    }
+    function saveSettings() {
+      localStorage.setItem("cl_settings", JSON.stringify({
+        phrases, rate: speechRate, voiceURI: selectedVoiceURI
+      }));
+    }
+    loadSettings();
+
+    // ---------- Speech ----------
+    let voices = [];
+    function loadVoices() {
+      voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith("en"));
+      const sel = document.getElementById("voice-select");
+      sel.innerHTML = "";
+      voices.forEach((v, i) => {
+        const opt = document.createElement("option");
+        opt.value = v.voiceURI;
+        opt.textContent = `${v.name} (${v.lang})`;
+        if (selectedVoiceURI ? v.voiceURI === selectedVoiceURI : i === 0) {
+          opt.selected = true;
+          selectedVoiceURI = v.voiceURI;
+        }
+        sel.appendChild(opt);
+      });
+    }
+    speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+
+    function speak(text) {
+      if (!text) return;
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = speechRate;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      const voice = voices.find(v => v.voiceURI === selectedVoiceURI);
+      if (voice) u.voice = voice;
+      speechSynthesis.speak(u);
+
+      const el = document.getElementById("last-cue");
+      el.textContent = text;
+      el.classList.add("show");
+      clearTimeout(el._t);
+      el._t = setTimeout(() => el.classList.remove("show"), 1800);
+
+      // light haptic
+      if (navigator.vibrate) navigator.vibrate(35);
+    }
+
+    // ---------- Gesture engine ----------
+    const surface = document.getElementById("surface");
+    const statusEl = document.getElementById("status");
+
+    let path = [];               // {x,y,t}
+    let pointerId = null;
+    let longPressTimer = null;
+    let lastSwipe = null;        // {dir, t}
+    let swipeCount = { up: 0, down: 0, t: 0 };
+    let lastTapTime = 0;
+    let tapCount = 0;
+
+    const SWIPE_MIN_DIST = 55;
+    const SWIPE_MAX_TIME = 650;
+    const MULTI_WINDOW = 900;    // ms to chain successive same-direction swipes
+    const CIRCLE_MIN_POINTS = 12;
+    const CIRCLE_MIN_ANGLE = 4.2; // radians ~ 240°
+    const LONG_PRESS_MS = 480;
+    const DOUBLE_TAP_MS = 320;
+
+    function now() { return performance.now(); }
+
+    function dist(a, b) {
+      const dx = a.x - b.x, dy = a.y - b.y;
+      return Math.hypot(dx, dy);
+    }
+
+    function angle(a, b) {
+      return Math.atan2(b.y - a.y, b.x - a.x);
+    }
+
+    function isCircle(pts) {
+      if (pts.length < CIRCLE_MIN_POINTS) return false;
+      // total path length and net displacement
+      let len = 0;
+      for (let i = 1; i < pts.length; i++) len += dist(pts[i-1], pts[i]);
+      const net = dist(pts[0], pts[pts.length-1]);
+      if (len < 180 || net / len > 0.35) return false; // not closed enough
+
+      // cumulative turning angle
+      let turn = 0;
+      for (let i = 2; i < pts.length; i++) {
+        const a1 = angle(pts[i-2], pts[i-1]);
+        const a2 = angle(pts[i-1], pts[i]);
+        let d = a2 - a1;
+        while (d > Math.PI) d -= 2*Math.PI;
+        while (d < -Math.PI) d += 2*Math.PI;
+        turn += d;
+      }
+      return Math.abs(turn) >= CIRCLE_MIN_ANGLE;
+    }
+
+    function classifySwipe(pts) {
+      if (pts.length < 2) return null;
+      const start = pts[0], end = pts[pts.length-1];
+      const dx = end.x - start.x, dy = end.y - start.y;
+      const d = Math.hypot(dx, dy);
+      const dt = end.t - start.t;
+      if (d < SWIPE_MIN_DIST || dt > SWIPE_MAX_TIME) return null;
+
+      const absX = Math.abs(dx), absY = Math.abs(dy);
+      if (absY > absX * 1.15) {
+        return dy < 0 ? "up" : "down";
+      } else if (absX > absY * 1.15) {
+        return dx < 0 ? "left" : "right";
+      }
+      return null;
+    }
+
+    function fire(cueKey) {
+      const text = phrases[cueKey] || DEFAULTS[cueKey];
+      speak(text);
+      statusEl.textContent = `Last: ${text}`;
+      document.getElementById("hud").classList.add("active");
+    }
+
+    function onPointerDown(e) {
+      if (pointerId !== null) return;
+      e.preventDefault();
+      pointerId = e.pointerId;
+      path = [{ x: e.clientX, y: e.clientY, t: now() }];
+      surface.setPointerCapture(pointerId);
+
+      longPressTimer = setTimeout(() => {
+        // long-press recognized
+        longPressTimer = null;
+        fire("right");
+        // consume the gesture so release doesn't also fire
+        path = [];
+        pointerId = null;
+      }, LONG_PRESS_MS);
+    }
+
+    function onPointerMove(e) {
+      if (e.pointerId !== pointerId) return;
+      e.preventDefault();
+      path.push({ x: e.clientX, y: e.clientY, t: now() });
+
+      // cancel long-press if finger moved meaningfully
+      if (longPressTimer && path.length > 3) {
+        const d = dist(path[0], path[path.length-1]);
+        if (d > 18) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
+    }
+
+    function onPointerUp(e) {
+      if (e.pointerId !== pointerId) return;
+      e.preventDefault();
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+
+      const pts = path.slice();
+      path = [];
+      pointerId = null;
+
+      if (pts.length < 2) {
+        // possible tap / double-tap
+        const t = now();
+        if (t - lastTapTime < DOUBLE_TAP_MS) {
+          tapCount++;
+        } else {
+          tapCount = 1;
+        }
+        lastTapTime = t;
+        if (tapCount >= 2) {
+          tapCount = 0;
+          fire("stop");
+        }
+        return;
+      }
+
+      // circle?
+      if (isCircle(pts)) {
+        fire("circle");
+        swipeCount = { up: 0, down: 0, t: 0 };
+        return;
+      }
+
+      // swipe?
+      const dir = classifySwipe(pts);
+      if (!dir) return;
+
+      const t = now();
+      // multi-swipe chaining for up/down
+      if (dir === "up" || dir === "down") {
+        if (t - swipeCount.t < MULTI_WINDOW && swipeCount[dir] > 0) {
+          swipeCount[dir]++;
+        } else {
+          swipeCount = { up: 0, down: 0, t };
+          swipeCount[dir] = 1;
+        }
+        swipeCount.t = t;
+
+        if (swipeCount[dir] >= 2) {
+          fire(dir === "up" ? "faster" : "slower");
+          swipeCount[dir] = 0; // reset after multi
+        } else {
+          fire(dir === "up" ? "harder" : "softer");
+        }
+      } else if (dir === "left") {
+        fire("left");
+        swipeCount = { up: 0, down: 0, t: 0 };
+      } else if (dir === "right") {
+        fire("rightside");
+        swipeCount = { up: 0, down: 0, t: 0 };
+      }
+    }
+
+    function onPointerCancel(e) {
+      if (e.pointerId !== pointerId) return;
+      if (longPressTimer) clearTimeout(longPressTimer);
+      longPressTimer = null;
+      path = [];
+      pointerId = null;
+    }
+
+    surface.addEventListener("pointerdown", onPointerDown, { passive: false });
+    surface.addEventListener("pointermove", onPointerMove, { passive: false });
+    surface.addEventListener("pointerup", onPointerUp, { passive: false });
+    surface.addEventListener("pointercancel", onPointerCancel, { passive: false });
+
+    // prevent context menu / selection on long press
+    surface.addEventListener("contextmenu", e => e.preventDefault());
+
+    // ---------- UI wiring ----------
+    const panel = document.getElementById("panel");
+    document.getElementById("btn-settings").addEventListener("click", () => {
+      // populate fields
+      document.getElementById("p-harder").value = phrases.harder;
+      document.getElementById("p-softer").value = phrases.softer;
+      document.getElementById("p-faster").value = phrases.faster;
+      document.getElementById("p-slower").value = phrases.slower;
+      document.getElementById("p-circle").value = phrases.circle;
+      document.getElementById("p-right").value = phrases.right;
+      document.getElementById("p-stop").value = phrases.stop;
+      document.getElementById("p-left").value = phrases.left;
+      document.getElementById("p-rightside").value = phrases.rightside;
+      document.getElementById("rate").value = speechRate;
+      loadVoices();
+      panel.classList.add("open");
+    });
+
+    document.getElementById("btn-save").addEventListener("click", () => {
+      phrases.harder = document.getElementById("p-harder").value.trim() || DEFAULTS.harder;
+      phrases.softer = document.getElementById("p-softer").value.trim() || DEFAULTS.softer;
+      phrases.faster = document.getElementById("p-faster").value.trim() || DEFAULTS.faster;
+      phrases.slower = document.getElementById("p-slower").value.trim() || DEFAULTS.slower;
+      phrases.circle = document.getElementById("p-circle").value.trim() || DEFAULTS.circle;
+      phrases.right = document.getElementById("p-right").value.trim() || DEFAULTS.right;
+      phrases.stop = document.getElementById("p-stop").value.trim() || DEFAULTS.stop;
+      phrases.left = document.getElementById("p-left").value.trim() || DEFAULTS.left;
+      phrases.rightside = document.getElementById("p-rightside").value.trim() || DEFAULTS.rightside;
+      speechRate = parseFloat(document.getElementById("rate").value) || 1.0;
+      selectedVoiceURI = document.getElementById("voice-select").value;
+      saveSettings();
+      panel.classList.remove("open");
+      statusEl.textContent = "Settings saved";
+    });
+
+    document.getElementById("btn-reset").addEventListener("click", () => {
+      phrases = { ...DEFAULTS };
+      speechRate = 1.0;
+      saveSettings();
+      document.getElementById("p-harder").value = phrases.harder;
+      document.getElementById("p-softer").value = phrases.softer;
+      document.getElementById("p-faster").value = phrases.faster;
+      document.getElementById("p-slower").value = phrases.slower;
+      document.getElementById("p-circle").value = phrases.circle;
+      document.getElementById("p-right").value = phrases.right;
+      document.getElementById("p-stop").value = phrases.stop;
+      document.getElementById("p-left").value = phrases.left;
+      document.getElementById("p-rightside").value = phrases.rightside;
+      document.getElementById("rate").value = 1.0;
+    });
+
+    document.getElementById("btn-test").addEventListener("click", () => {
+      selectedVoiceURI = document.getElementById("voice-select").value;
+      speechRate = parseFloat(document.getElementById("rate").value) || 1.0;
+      speak("Harder. Right there. Keep going.");
+    });
+
+    document.getElementById("btn-fs").addEventListener("click", () => {
+      const el = document.documentElement;
+      if (!document.fullscreenElement) {
+        (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen)?.call(el);
+      } else {
+        (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+      }
+    });
+
+    // unlock speech on first interaction (iOS requirement)
+    let unlocked = false;
+    function unlockSpeech() {
+      if (unlocked) return;
+      unlocked = true;
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      speechSynthesis.speak(u);
+      statusEl.textContent = "Speech ready · gestures live";
+    }
+    surface.addEventListener("pointerdown", unlockSpeech, { once: true });
+
+    // prevent bounce / overscroll
+    document.body.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+  </script>
+</body>
+</html>
